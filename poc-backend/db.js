@@ -2,17 +2,12 @@ const sqlite3 = require("sqlite3").verbose();
 const filepath = "./files.db";
 const fs = require("fs");
 
-function createDbConnection(filepath) {    
+function createDbConnection(filepath) {
     if (fs.existsSync(filepath)) {
-        const db =  new sqlite3.Database(filepath);
-        db.each(`SELECT count(*) FROM Users`, (error, row) => {
-            if (error) {
-              throw new Error(error.message);
-            }
-            console.log(row);
-          });
+        const db = new sqlite3.Database(filepath);
         return db
     } else {
+        console.log("Creating DB")
         const db = new sqlite3.Database(filepath, (error) => {
             if (error) {
                 return console.error(error.message);
@@ -25,6 +20,7 @@ function createDbConnection(filepath) {
 }
 
 function createTable(db) {
+    console.log("Creating User Table")
     db.exec(`
     CREATE TABLE Users
     (
@@ -41,7 +37,8 @@ function createTable(db) {
       Guardian_Email VARCHAR(250),
       Guardian2_First_Name VARCHAR(250),
       Guardian2_Last_Name VARCHAR(250),
-      Guardian2_Email VARCHAR(250)
+      Guardian2_Email VARCHAR(250),
+      file_id VARCHAR(250)
     );
   `);
 }
