@@ -1,0 +1,19 @@
+version: '3'
+
+services:
+  backend:
+    build:
+      context: ./poc-backend
+      dockerfile: ./Dockerfile
+    image: "codesmith1999/csv-poc-backend"
+    ports:
+      - "3001:3001"
+  frontend:
+    build:
+      context: ./poc-frontend
+      dockerfile: ./Dockerfile
+    image: "codesmith1999/csv-poc-frontend"
+    ports:
+      - "3000:3000"
+    links:
+      - "backend:be"
