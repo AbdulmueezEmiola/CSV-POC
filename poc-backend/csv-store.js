@@ -1,12 +1,48 @@
 const stream = require("node:stream");
 const { parse } = require('@fast-csv/parse');
+const {writeToStream } = require('@fast-csv/format')
 const { DataStore, ERRORS } = require("@tus/server")
+const fs = require('fs')
+const path = require('path')
+const IGNORED_MKDIR_ERROR = 'EEXIST'
+const MASK = '0777'
 
 class CSVStore extends DataStore {
+
     constructor({ db, rowSize }) {
         super()
+        this.directory = 'error_csv_files'
         this.db = db
         this.rowSize = rowSize
+        this.checkOrCreateDirectory()
+    }
+
+    checkOrCreateDirectory() {
+        fs.mkdir(this.directory, MASK, (error) => {
+            if (error && error.code !== IGNORED_MKDIR_ERROR) {
+                throw error
+            }
+        })
+    }
+
+
+    create(file) {
+        return new Promise((resolve, reject) => {
+            fs.open(path.join(this.directory, file.id), 'w', (err, fd) => {
+                if (err) {
+                    console.log('[CSVStore] create: Error creating error csv file ', err)
+                    return reject(err)
+                }
+                return fs.close(fd, (exception) => {
+                    if (exception) {
+                        console.log('[CSVStore] create: Error', exception)
+                        return reject(exception)
+                    }
+
+                    return resolve(file)
+                })
+            })
+        })
     }
 
     rowValidator(row) {
@@ -23,7 +59,7 @@ class CSVStore extends DataStore {
     }
 
     bulkInsertToDb(rows, file_id) {
-        this.db.serialize(()=>{
+        this.db.serialize(() => {
             this.db.run('begin transaction')
             for (const row of rows) {
                 this.db.run("insert into Users ('School_ID', 'DCID', 'Last_Name','First_Name', 'Email', 'Grade_Level', 'Student_ID', 'Guardian_Email', 'Guardian_Last_Name','Guardian_First_Name','Guardian2_Email', 'Guardian2_Last_Name', 'Guardian2_First_Name', 'file_id') values (?, ?, ?,?,?,?,?,?,?,?,?,?,?,?)",
@@ -34,13 +70,20 @@ class CSVStore extends DataStore {
             }
             this.db.run('commit')
         })
-    }   
+    }
+
+    insertErrorRows(rows, stream){
+        writeToStream(stream, rows);
+    }
 
     write(
         readable,
         file_id,
         offset
     ) {
+        const file_path = path.join(this.directory, file_id)
+        const error_writeable = fs.createWriteStream(file_path, {flags:'a'})
+
         let _this = this
         let validRows = []
         let invalidRows = []
@@ -56,7 +99,8 @@ class CSVStore extends DataStore {
                     _this.bulkInsertToDb(validRows, file_id)
                     validRows = []
                 }
-                if (invalidRows.length ===  _this.rowSize) {
+                if (invalidRows.length === _this.rowSize) {
+                    _this.insertErrorRows(invalidRows, error_writeable)
                     invalidRows = []
                 }
             })
@@ -65,7 +109,8 @@ class CSVStore extends DataStore {
                     _this.bulkInsertToDb(validRows, file_id)
                     validRows = []
                 }
-                if (invalidRows.length > 0) {
+                if (invalidRows.length > 0) {                    
+                    _this.insertErrorRows(invalidRows, error_writeable)
                     invalidRows = []
                 }
             })
